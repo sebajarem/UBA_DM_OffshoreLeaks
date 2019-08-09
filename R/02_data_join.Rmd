@@ -1,0 +1,750 @@
+---
+title: "Junta Data de las 4 Investigaciones"
+output: 
+  html_notebook:
+    toc: yes
+    number_sections: true
+    code_folding: hide
+---
+
+
+```{r setup, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+```
+
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# incluyo archivo con defines y funciones
+source("./R/00_Defines_VariablesGlobales_Universos.R")
+source("./R/01_01_lectura_datos_originales_rds.R")
+
+```
+
+
+# Analisis de las aristas
+
+## analisis de estructura original del dataset de aristas
+
+```{r}
+########################
+# junto los datos de las investigaciones
+########################
+print("variables que contiene cada investigacion")
+print("bahamas")
+names(bahamas_leaks_edges)
+print("offshore leaks")
+names(offshore_leaks_edges)
+print("panama papers")
+names(panama_papers_edges)
+print("paradise papers")
+names(paradise_papers_edges)
+
+glimpse(bahamas_leaks_edges)
+glimpse(offshore_leaks_edges)
+glimpse(panama_papers_edges)
+glimpse(paradise_papers_edges)
+
+unique(bahamas_leaks_edges$rel_type)
+
+unique(offshore_leaks_edges$link)
+unique(offshore_leaks_edges$TYPE)
+
+unique(panama_papers_edges$TYPE)
+unique(panama_papers_edges$link)
+
+unique(paradise_papers_edges$TYPE)
+unique(paradise_papers_edges$link)
+
+```
+
+se puede ver que las aristas son parecidas en casi todas las investigaciones
+
+la variable link y type definen el tipo de relacion que tienen los nodos. Sin embargo la variable link es mas detallada
+
+la informacion de la investigacion de bahamas no tiene tanto detalle como los otras investigaciones. Se puede observar que tampoco es un grafo direccionable como si son las otras investigaciones
+
+paradise papers en el link tiene demasiado detalle o concatenacion de varios tipos de relacion
+
+
+## analisis de valores NA
+
+```{r}
+print("bahamas")
+apply(bahamas_leaks_edges, 2, function(x) { table(is.na(x))})
+print("offshore")
+apply(offshore_leaks_edges, 2, function(x) { table(is.na(x))})
+print("panama")
+apply(panama_papers_edges, 2, function(x) { table(is.na(x))})
+print("paradise")
+apply(paradise_papers_edges, 2, function(x) { table(is.na(x))})
+
+```
+
+se puede ver que las fechas es un gran faltante en todas las investigaciones
+
+
+## Criterios de union de aristas
+
+se propone duplicar la columna rel_type de bahamas para poder unirlas con las otras investigaciones y no perder el detalle de las demas en la columna link
+
+se eliminan las fechas
+
+```{r}
+names(bahamas_leaks_edges)
+names(offshore_leaks_edges)
+names(panama_papers_edges)
+names(paradise_papers_edges)
+
+
+```
+
+modifico el dataset de bahamas para juntarlo con los demas
+
+```{r}
+
+names(bahamas_leaks_edges) = c("START_ID", "TYPE", "END_ID", "sourceID")
+# agrego la columna duplicada llamada link
+bahamas_leaks_edges$link = bahamas_leaks_edges$TYPE
+
+glimpse(bahamas_leaks_edges)
+
+```
+
+## junto aristas
+
+
+```{r}
+
+edges = rbind(
+  bahamas_leaks_edges[,c("START_ID", "TYPE", "END_ID", "link", "sourceID" )],
+  offshore_leaks_edges[,c("START_ID", "TYPE", "END_ID", "link", "sourceID")],
+  panama_papers_edges[,c("START_ID", "TYPE", "END_ID", "link", "sourceID")],
+  paradise_papers_edges[,c("START_ID", "TYPE", "END_ID", "link", "sourceID")]
+)
+
+# elimino duplicados
+edges = edges[!duplicated(edges),]
+
+3142523 - 3111870
+
+
+```
+
+grabo las aristas
+
+```{r}
+
+# saveRDS(edges, file = "./salidas_datos/originales_unidos/edges.rds")
+
+```
+
+
+# Analisis de Nodos
+
+
+
+```{r}
+names(bahamas_leaks_nodes_entity)
+names(offshore_leaks_nodes_entity)
+names(panama_papers_nodes_entity)
+names(paradise_papers_nodes_entity)
+
+
+```
+
+nuevamente el unico dataset distinto es el de la investigacion de bahamas
+
+
+analizamos primero los NA
+
+```{r}
+
+print("bahamas")
+apply(bahamas_leaks_nodes_entity, 2, function(x) { table(is.na(x))})
+print("offshore")
+apply(offshore_leaks_nodes_entity, 2, function(x) { table(is.na(x))})
+print("panama")
+apply(panama_papers_nodes_entity, 2, function(x) { table(is.na(x))})
+print("paradise")
+apply(paradise_papers_nodes_entity, 2, function(x) { table(is.na(x))})
+
+```
+
+## juntar datasets por tipo
+
+### entidades
+
+```{r}
+
+names(bahamas_leaks_nodes_entity)
+names(offshore_leaks_nodes_entity)
+names(panama_papers_nodes_entity)
+names(paradise_papers_nodes_entity)
+
+bahamas_leaks_nodes_entity =
+  bahamas_leaks_nodes_entity %>%
+  select(- `labels(n)`, - address, - type)
+
+offshore_leaks_nodes_entity =
+  offshore_leaks_nodes_entity %>%
+  select(-inactivation_date, -struck_off_date)
+
+panama_papers_nodes_entity =
+  panama_papers_nodes_entity %>%
+  select(-inactivation_date, -struck_off_date)
+
+paradise_papers_nodes_entity =
+  paradise_papers_nodes_entity %>%
+  select(-inactivation_date, -struck_off_date)
+
+
+entities =
+  rbind(
+    bahamas_leaks_nodes_entity,
+    offshore_leaks_nodes_entity,
+    panama_papers_nodes_entity,
+    paradise_papers_nodes_entity
+  )
+
+
+
+```
+
+### addresses
+
+
+```{r}
+
+names(bahamas_leaks_nodes_address)
+names(offshore_leaks_nodes_address)
+names(panama_papers_nodes_address)
+names(paradise_papers_nodes_address)
+ 
+
+```
+
+analisis de NAs en addresses de bahamas unicamente porque tiene variables de mas y no pareceria razonable que esten completas
+
+```{r}
+
+apply(bahamas_leaks_nodes_address, 2, function(x) { table(is.na(x))})
+
+
+```
+
+efectivamente todas las variables que estan demas tiene  todas NAs
+
+```{r}
+
+bahamas_leaks_nodes_address =
+  bahamas_leaks_nodes_address %>%
+  select(names(offshore_leaks_nodes_address))
+
+
+```
+
+junto los datasets de addresses
+
+```{r}
+
+address =
+  rbind(
+    bahamas_leaks_nodes_address,
+    offshore_leaks_nodes_address,
+    panama_papers_nodes_address,
+    paradise_papers_nodes_address
+  )
+
+
+```
+
+
+### Intermediary
+
+```{r}
+names(bahamas_leaks_nodes_intermediary)
+names(offshore_leaks_nodes_intermediary)
+names(panama_papers_nodes_intermediary)
+names(paradise_papers_nodes_intermediary)
+
+
+```
+
+nuevamente pasa lo mismo
+
+
+```{r}
+apply(bahamas_leaks_nodes_intermediary, 2, function(x) { table(is.na(x))})
+```
+
+
+
+```{r}
+
+
+
+bahamas_leaks_nodes_intermediary =
+  bahamas_leaks_nodes_intermediary %>%
+  select(names(offshore_leaks_nodes_intermediary))
+
+
+```
+
+analisis de la variable status para eliminarla si corresponde
+
+```{r}
+
+table(is.na(bahamas_leaks_nodes_intermediary$status))
+table(is.na(offshore_leaks_nodes_intermediary$status))
+table(is.na(panama_papers_nodes_intermediary$status))
+
+
+```
+
+se elimina porque solo lo usa panama papers
+
+```{r}
+
+bahamas_leaks_nodes_intermediary =
+  bahamas_leaks_nodes_intermediary %>%
+  select(-status)
+
+offshore_leaks_nodes_intermediary =
+  offshore_leaks_nodes_intermediary %>%
+  select(-status)
+
+panama_papers_nodes_intermediary =
+  panama_papers_nodes_intermediary %>%
+  select(-status)
+
+
+```
+
+
+junto los datasets
+
+```{r}
+
+intermediary =
+  rbind(
+    bahamas_leaks_nodes_intermediary,
+    offshore_leaks_nodes_intermediary,
+    panama_papers_nodes_intermediary,
+    paradise_papers_nodes_intermediary
+  )
+
+```
+
+
+### officers
+
+```{r}
+
+names(bahamas_leaks_nodes_officer)
+names(offshore_leaks_nodes_officer)
+names(panama_papers_nodes_officer)
+names(paradise_papers_nodes_officer)
+
+
+```
+
+
+analiso variable status de bahamas y de paradise para ver si se justifica agregar en los otros datasets
+
+```{r}
+table(is.na(bahamas_leaks_nodes_officer$status))
+table(is.na(paradise_papers_nodes_officer$status))
+
+
+```
+
+se elimina la variable.
+
+se analizan las otras variables de bahamas
+
+
+```{r}
+
+apply(bahamas_leaks_nodes_officer, 2, function(x) { table(is.na(x))})
+
+
+```
+
+
+```{r}
+
+bahamas_leaks_nodes_officer =
+  bahamas_leaks_nodes_officer %>%
+  select(names(offshore_leaks_nodes_officer))
+
+paradise_papers_nodes_officer =
+  paradise_papers_nodes_officer %>%
+  select(-status)
+```
+
+
+junto los datasets
+
+```{r}
+
+
+officers =
+  rbind(
+    bahamas_leaks_nodes_officer,
+    offshore_leaks_nodes_officer,
+    panama_papers_nodes_officer,
+    paradise_papers_nodes_officer
+  )
+
+
+```
+
+
+
+# grabar datos 
+
+```{r}
+
+# saveRDS(entities, file = "./salidas_datos/originales_unidos/entities.rds")
+# saveRDS(address, file = "./salidas_datos/originales_unidos/address.rds")
+# saveRDS(intermediary, file = "./salidas_datos/originales_unidos/intermediary.rds")
+# saveRDS(officers, file = "./salidas_datos/originales_unidos/officers.rds")
+
+```
+
+# Analisis NAs tipo de nodos
+
+```{r}
+
+entities =
+  entities %>%
+  mutate(
+    sourceID = if_else(stringr::str_detect(sourceID, "Paradise Papers"), "Paradise Papers", sourceID )
+  )
+
+
+intermediary =
+  intermediary %>%
+  mutate(
+    sourceID = if_else(stringr::str_detect(sourceID, "Paradise Papers"), "Paradise Papers", sourceID )
+  )
+
+address =
+  address %>%
+  mutate(
+    sourceID = if_else(stringr::str_detect(sourceID, "Paradise Papers"), "Paradise Papers", sourceID )
+  )
+
+officers =
+  officers %>%
+  mutate(
+    sourceID = if_else(stringr::str_detect(sourceID, "Paradise Papers"), "Paradise Papers", sourceID )
+  )
+
+table(intermediary$sourceID)
+
+
+print("entities")
+# a = (gapply( object = entities, groups = "sourceID", FUN =  function(x) { (is.na(x))}))
+
+ap_ent_bahamas = apply(entities[entities$sourceID == "Bahamas Leaks",], 2, function(x) { table(is.na(x))})
+ap_ent_offshore = apply(entities[entities$sourceID == "Offshore Leaks",], 2, function(x) { table(is.na(x))})
+ap_ent_panama = apply(entities[entities$sourceID == "Panama Papers",], 2, function(x) { table(is.na(x))})
+ap_ent_paradise = apply(entities[entities$sourceID == "Paradise Papers",], 2, function(x) { table(is.na(x))})
+
+print("intermediary")
+ap_int_bahamas = apply(intermediary[intermediary$sourceID == "Bahamas Leaks",], 2, function(x) { table(is.na(x))})
+ap_int_offshore = apply(intermediary[intermediary$sourceID == "Offshore Leaks",], 2, function(x) { table(is.na(x))})
+ap_int_panama = apply(intermediary[intermediary$sourceID == "Panama Papers",], 2, function(x) { table(is.na(x))})
+ap_int_paradise = apply(intermediary[intermediary$sourceID == "Paradise Papers",], 2, function(x) { table(is.na(x))})
+
+print("address")
+ap_add_bahamas = apply(address[address$sourceID == "Bahamas Leaks",], 2, function(x) { table(is.na(x))})
+ap_add_offshore = apply(address[address$sourceID == "Offshore Leaks",], 2, function(x) { table(is.na(x))})
+ap_add_panama = apply(address[address$sourceID == "Panama Papers",], 2, function(x) { table(is.na(x))})
+ap_add_paradise = apply(address[address$sourceID == "Paradise Papers",], 2, function(x) { table(is.na(x))})
+
+print("officers")
+ap_off_bahamas = apply(officers[officers$sourceID == "Bahamas Leaks",], 2, function(x) { table(is.na(x))})
+ap_off_offshore = apply(officers[officers$sourceID == "Offshore Leaks",], 2, function(x) { table(is.na(x))})
+ap_off_panama = apply(officers[officers$sourceID == "Panama Papers",], 2, function(x) { table(is.na(x))})
+ap_off_paradise = apply(officers[officers$sourceID == "Paradise Papers",], 2, function(x) { table(is.na(x))})
+
+
+
+
+# ap_int = apply(intermediary, 2, function(x) { table(is.na(x))})
+# 
+# ap_ad = apply(address, 2, function(x) { table(is.na(x))})
+# 
+# ap_ad = apply(officers, 2, function(x) { table(is.na(x))})
+
+```
+
+
+analisis de los TRUE / FALSE en cada variable
+
+```{r}
+
+# col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_ent_bahamas)))), "\\.", 2))
+# col2 = as_data_frame(as.matrix((unlist(ap_ent_bahamas))))
+# dt_ent_bahamas = cbind.data.frame(col1, col2)
+# names(dt_ent_bahamas) = c("variable", "es_NA", "cantidad")
+
+
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_ent_bahamas)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_ent_bahamas))))
+dt_ent_bahamas = cbind.data.frame(col1, col2)
+names(dt_ent_bahamas) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_ent_offshore)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_ent_offshore))))
+dt_ent_offshore = cbind.data.frame(col1, col2)
+names(dt_ent_offshore) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_ent_panama)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_ent_panama))))
+dt_ent_panama = cbind.data.frame(col1, col2)
+names(dt_ent_panama) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_ent_paradise)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_ent_paradise))))
+dt_ent_paradise = cbind.data.frame(col1, col2)
+names(dt_ent_paradise) = c("variable", "es_NA", "cantidad")
+
+##
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_int_bahamas)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_int_bahamas))))
+dt_int_bahamas = cbind.data.frame(col1, col2)
+names(dt_int_bahamas) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_int_offshore)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_int_offshore))))
+dt_int_offshore = cbind.data.frame(col1, col2)
+names(dt_int_offshore) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_int_panama)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_int_panama))))
+dt_int_panama = cbind.data.frame(col1, col2)
+names(dt_int_panama) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_int_paradise)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_int_paradise))))
+dt_int_paradise = cbind.data.frame(col1, col2)
+names(dt_int_paradise) = c("variable", "es_NA", "cantidad")
+
+##
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_add_bahamas)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_add_bahamas))))
+dt_add_bahamas = cbind.data.frame(col1, col2)
+names(dt_add_bahamas) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_add_offshore)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_add_offshore))))
+dt_add_offshore = cbind.data.frame(col1, col2)
+names(dt_add_offshore) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_add_panama)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_add_panama))))
+dt_add_panama = cbind.data.frame(col1, col2)
+names(dt_add_panama) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_add_paradise)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_add_paradise))))
+dt_add_paradise = cbind.data.frame(col1, col2)
+names(dt_add_paradise) = c("variable", "es_NA", "cantidad")
+
+##
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_off_bahamas)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_off_bahamas))))
+dt_off_bahamas = cbind.data.frame(col1, col2)
+names(dt_off_bahamas) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_off_offshore)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_off_offshore))))
+dt_off_offshore = cbind.data.frame(col1, col2)
+names(dt_off_offshore) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_off_panama)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_off_panama))))
+dt_off_panama = cbind.data.frame(col1, col2)
+names(dt_off_panama) = c("variable", "es_NA", "cantidad")
+
+col1 = as_data_frame(str_split_fixed(rownames(as.matrix((unlist(ap_off_paradise)))), "\\.", 2))
+col2 = as_data_frame(as.matrix((unlist(ap_off_paradise))))
+dt_off_paradise = cbind.data.frame(col1, col2)
+names(dt_off_paradise) = c("variable", "es_NA", "cantidad")
+
+##
+
+
+```
+
+
+
+
+```{r}
+
+barras_analisis_NA <- function(ggdata) {
+  
+  ggplot(ggdata, aes(x = variable, y = cantidad, fill = es_NA)) +
+    geom_bar(position = "dodge", stat = "identity") +
+    theme(axis.text.x = element_text(angle = 45,hjust = 1))
+  
+}
+
+barras_analisis_NA(dt_ent_bahamas)
+barras_analisis_NA(dt_ent_offshore)
+barras_analisis_NA(dt_ent_panama)
+barras_analisis_NA(dt_ent_paradise)
+
+barras_analisis_NA(dt_int_bahamas)
+barras_analisis_NA(dt_int_offshore)
+barras_analisis_NA(dt_int_panama)
+barras_analisis_NA(dt_int_paradise)
+
+barras_analisis_NA(dt_add_bahamas)
+barras_analisis_NA(dt_add_offshore)
+barras_analisis_NA(dt_add_panama)
+barras_analisis_NA(dt_add_paradise)
+
+barras_analisis_NA(dt_off_bahamas)
+barras_analisis_NA(dt_off_offshore)
+barras_analisis_NA(dt_off_panama)
+barras_analisis_NA(dt_off_paradise)
+
+
+
+
+
+
+```
+
+
+
+
+
+## conclusion analisis NAs
+
+* entidades
+closed_date -> borrar
+company type -> solo la tiene offshore
+countries y country_codes -> bahamas no lo tiene en los demas safa aunq hay faltantes
+libcRUC -> queda (ver bien que significa)
+incorporation_date -> lo dejo aunqeu por ahora no voy a manejar fechas
+jurisdiction y jurisdiction_description -> quedan
+name y name_id -> quedan
+note -> borrar
+service_provider -> bahamas no lo tiene y paradise muy poquito. los otros estan completo
+sourceID -> queda
+status -> queda (paradise no lo tiene)
+valid_until -> queda (ver bine significado)
+
+* intermediary
+se borra note nada mas
+
+* address
+name -> borrar (solo lo tiene paradise. antes ver bien que contiene)
+note -> borrar
+
+* officers
+note -> borrar
+country y country_code -> hay faltantes en varios principalmente en bahamas
+
+
+## conclusion rapida
+
+para avanzar rapido sin seguir perdiendo tanto tiempo en pulir los datos -> trabajar con 2 investigaciones
+panama papers y offshore leaks
+
+son las investigaciones con datos mas completos
+
+
+paradise podria agregarse para algo particular
+
+# veamos cuanta info dejamos afuera
+
+```{r}
+
+print("Entidades")
+print(nrow(entities))
+
+print("cantidad de datos de Bahamas")
+print(nrow(entities %>% filter(sourceID == "Bahamas Leaks")))
+print("cantidad de datos de offshore")
+print(nrow(entities %>% filter(sourceID == "Offshore Leaks")))
+print("cantidad de datos de panama")
+print(nrow(entities %>% filter(sourceID == "Panama Papers")))
+print("cantidad de datos de paradise")
+print(nrow(entities %>% filter(sourceID == "Paradise Papers")))
+
+print("")
+print("")
+
+
+
+print("Intermediary")
+print(nrow(intermediary))
+
+print("cantidad de datos de Bahamas")
+print(nrow(intermediary %>% filter(sourceID == "Bahamas Leaks")))
+print("cantidad de datos de offshore")
+print(nrow(intermediary %>% filter(sourceID == "Offshore Leaks")))
+print("cantidad de datos de panama")
+print(nrow(intermediary %>% filter(sourceID == "Panama Papers")))
+print("cantidad de datos de paradise")
+print(nrow(intermediary %>% filter(sourceID == "Paradise Papers")))
+
+print("")
+print("")
+
+print("Address")
+print(nrow(address))
+
+print("cantidad de datos de Bahamas")
+print(nrow(address %>% filter(sourceID == "Bahamas Leaks")))
+print("cantidad de datos de offshore")
+print(nrow(address %>% filter(sourceID == "Offshore Leaks")))
+print("cantidad de datos de panama")
+print(nrow(address %>% filter(sourceID == "Panama Papers")))
+print("cantidad de datos de paradise")
+print(nrow(address %>% filter(sourceID == "Paradise Papers")))
+
+print("")
+print("")
+
+print("Officers")
+print(nrow(officers))
+
+print("cantidad de datos de Bahamas")
+print(nrow(officers %>% filter(sourceID == "Bahamas Leaks")))
+print("cantidad de datos de offshore")
+print(nrow(officers %>% filter(sourceID == "Offshore Leaks")))
+print("cantidad de datos de panama")
+print(nrow(officers %>% filter(sourceID == "Panama Papers")))
+print("cantidad de datos de paradise")
+print(nrow(officers %>% filter(sourceID == "Paradise Papers")))
+
+print("")
+print("")
+     
+# ap_add_bahamas = apply(address[address$sourceID == "Bahamas Leaks",], 2, function(x) { table(is.na(x))})
+# ap_add_offshore = apply(address[address$sourceID == "Offshore Leaks",], 2, function(x) { table(is.na(x))})
+# ap_add_panama = apply(address[address$sourceID == "Panama Papers",], 2, function(x) { table(is.na(x))})
+# ap_add_paradise = apply(address[address$sourceID == "Paradise Papers",], 2, function(x) { table(is.na(x))})
+
+
+```
+
+
+## conclusion basada en volumen
+
+sacar bahamas no habria mucho problema si los datos molestan
+
+sacar paradise representa sacar un gran porcentaje de la base de datos por lo que se tratará de dejar
+

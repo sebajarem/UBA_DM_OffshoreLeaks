@@ -1,0 +1,339 @@
+---
+title: "Panama Papers - Offshore-Leaks Papers - Bahamas papers - Paradise-Papers"
+author: "Jaremczuk Sebastian Ezequiel"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  html_notebook:
+    code_folding: hide
+    number_sections: yes
+    toc: yes
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+# knitr::opts_knit$set(root.dir = "..")
+
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+#general
+require(purrr)
+require(tidyverse)
+require(data.table)
+require(lubridate)
+require(stringr)
+require(ggvis)
+require(ggplot2)
+require(forcats)
+require(ggmap)
+require(highcharter)
+require(broom)
+require(plotly)
+require(stringi)
+
+#network plot
+require(igraph)
+require(ggmap)
+require(sna)
+require(intergraph)
+require(ggnetwork)
+require('visNetwork')
+
+require(viridis)
+
+# achieve/appendices
+require(GGally)
+require(networkD3)
+
+
+```
+
+
+# Datos Originales
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+
+Entities <- as.data.table(read.csv(file="../datos/datos_originales_kaggle/Entities.csv",na.strings=c("","NA"),stringsAsFactors = FALSE))
+
+Addresses <- as.data.table(read.csv(file="../datos/datos_originales_kaggle/Addresses.csv",na.strings=c("","NA"),stringsAsFactors = FALSE))
+
+Intermediaries <- as.data.table(read.csv(file="../datos/datos_originales_kaggle/Intermediaries.csv",na.strings=c("","NA"),stringsAsFactors = FALSE))
+
+Officers <- as.data.table(read.csv(file="../datos/datos_originales_kaggle/Officers.csv",na.strings=c("","NA"),stringsAsFactors = FALSE))
+
+Edges <- as.data.table(read.csv(file="../datos/datos_originales_kaggle/all_edges.csv",na.strings=c("","NA"), stringsAsFactors = FALSE))
+
+
+```
+
+## Entidades
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=TRUE}
+
+head(Entities)
+
+
+```
+
+## Direcciones
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=TRUE}
+head(Addresses)
+
+```
+
+## Intermediarios
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+head(Intermediaries)
+
+```
+
+
+## Officers - Personas
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+head(Officers)
+
+
+```
+
+
+## Relaciones
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+head(Edges)
+```
+
+
+# Entidades
+
+Analisis exclusivo de las entidades
+
+## Entidades por pais
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+Entities_country =
+  Entities %>%
+  #filter(countries != "") %>%
+  group_by(countries) %>%
+  summarise(
+    N = n()
+  ) %>%
+  arrange(desc(N))
+  
+ggplot(Entities_country[1:15,], aes(x = reorder(countries,-N), y = N, fill = countries)) +
+  geom_bar(stat = "identity") +
+  geom_label(aes(label=N)) +
+  guides(fill="none") +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1)) +
+  labs(caption="Donyoe",title=" TOP Paises en cantidad de Entidades") +
+  xlab(NULL)+ylab(NULL)
+
+
+```
+
+## Entidades por jurisdiccion
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+Entities_juridicion =
+  Entities %>%
+  group_by(jurisdiction_description) %>%
+  summarise(
+    N = n()
+  ) %>%
+  arrange(desc(N))
+
+
+ggplot(Entities_juridicion[1:15,],aes(x = reorder(jurisdiction_description,-N), y = N, fill = jurisdiction_description)) +
+  geom_bar(stat="identity") +
+  geom_label(aes(label=N)) +
+  guides(fill="none") +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1)) +
+  labs(caption="Donyoe",title=" TOP Jurisdiccion en cantidad de Entidades")
+
+
+```
+
+## Entidades por Status
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+Entities_status =
+  Entities %>%
+  group_by(status) %>%
+  summarise(
+    N = n()
+  ) %>%
+  arrange(desc(N))
+  
+
+ggplot(Entities_status[1:10,], aes(x = reorder(status,-N), y = N, fill = status)) +
+  geom_bar(stat="identity") +
+  geom_label(aes(label=N)) +
+  guides(fill="none") +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1)) +
+  labs(caption="Donyoe",title=" TOP Status por cantidad de Entidades") +
+  xlab(NULL)+ylab(NULL)
+
+```
+
+## Entidades por proveedor de Servicios
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+Entities_service_provider =
+  Entities %>%
+  group_by(service_provider) %>%
+  summarise(
+    N = n()
+  ) %>%
+  arrange(desc(N))
+
+
+ggplot(Entities_service_provider, aes( x = reorder(service_provider,-N), y = N, fill = service_provider)) +
+  geom_bar(stat="identity") +
+  geom_label(aes(label=N)) +
+  guides(fill="none") +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1)) +
+  labs(caption="Donyoe",title=" TOP Proveedor de Servicios en cantidad de Entidades ")+
+  xlab(NULL)+ylab(NULL)
+
+```
+
+## Entidades por Fuente de Informacion
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+Entities_source =
+  Entities %>%
+  group_by(sourceID) %>%
+  summarise(
+    N = n()
+  ) %>%
+  arrange(desc(N))
+
+ggplot(Entities_source, aes( x = reorder(sourceID,-N), y = N, fill = sourceID)) +
+  geom_bar(stat="identity") +
+  geom_label(aes(label=N)) +
+  guides(fill="none") +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1)) +
+  labs(caption="Donyoe",title=" TOP Fuente de Informacion")+
+  xlab(NULL)+ylab(NULL)
+
+
+
+```
+
+
+
+# Direcciones
+
+## Direcciones por Pais
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+Addresses_country =
+  Addresses %>%
+  group_by(countries) %>%
+  summarise(
+    N = n()
+  ) %>%
+  arrange(desc(N))
+
+
+ggplot(Addresses_country[1:15,], aes( x = reorder(countries,-N), y = N, fill = countries)) +
+  geom_bar(stat="identity") +
+  geom_label(aes(label=N)) +
+  guides(fill="none") +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1)) +
+  labs(caption="Donyoe",title=" TOP Paises de acuerdo a la direccion")+
+  xlab(NULL)+ylab(NULL)
+
+```
+
+
+
+
+# Officers (Personas declaradas en las empresas)
+
+## Officers por Pais
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+Officers_country =
+  Officers %>%
+  group_by(countries) %>%
+  summarise(
+    N = n()
+  ) %>%
+  arrange(desc(N))
+
+ggplot(Officers_country[1:15,], aes( x= reorder(countries,-N), y = N, fill= countries)) +
+  geom_bar(stat="identity") +
+  geom_label(aes(label=N)) +
+  guides(fill="none") +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1)) +
+  labs(caption="Donyoe",title=" TOP Paises por Officers ")+
+  xlab(NULL)+ylab(NULL)
+
+```
+
+
+# Intermediaries (Intermediarios)
+
+## Intermediarios por Pais
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+Intermediaries_country =
+  Intermediaries %>%
+  group_by(countries) %>%
+  summarise(
+    N = n()
+  ) %>%
+  arrange(desc(N))
+
+ggplot(Intermediaries_country[1:15,], aes( x= reorder(countries,-N), y=N, fill=countries)) +
+  geom_bar(stat="identity") +
+  geom_label(aes(label=N)) +
+  guides(fill="none") +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1)) +
+  labs(caption="Donyoe",title=" TOP Paises de Intermediarios") +
+  xlab(NULL)+ylab(NULL)
+
+```
+
+
+# Edges (Aristas)
+
+## Tipo de Relacion
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+Edges_tipo_relacion =
+  Edges %>%
+  group_by(rel_type) %>%
+  summarise(
+    N = n()
+  ) %>%
+  arrange(desc(N))
+
+ggplot(Edges_tipo_relacion[1:15,], aes(x=reorder(rel_type,-N), y=N, fill=rel_type)) +
+  geom_bar(stat="identity") +
+  geom_label(aes(label=N)) +
+  guides(fill="none") +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1)) +
+  labs(caption="Donyoe",title=" TOP Tipo de Relacion ")+
+  xlab(NULL)+ylab(NULL)
+
+```
+

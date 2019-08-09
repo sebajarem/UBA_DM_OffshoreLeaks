@@ -1,0 +1,209 @@
+---
+title: "Arma datos para Grafos"
+output:
+  html_document:
+    df_print: paged
+    toc: yes
+  html_notebook:
+    code_folding: hide
+    number_sections: yes
+    toc: yes
+---
+
+
+```{r setup, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+```
+
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+# incluyo archivo con defines y funciones
+source("./R/00_Defines_VariablesGlobales_Universos.R")
+source("./R/01_01_lectura_datos_originales_rds.R")
+
+```
+
+
+# Resumen de la Exploración
+
+En este trabajo se van a tomar las siguientes investigaciones:
+
+- offshore leaks
+
+- panama papers
+
+- paradise papers
+
+La investigación de Bahamas no se analizará en este trabajo por las siguientes razones:
+
+Basado en la exploración anterior, la investigación de bahamas aporta la menora cantidad de información de la base de datos. De esta forma no afecta al gran volumen si se lo saca. A su vez, en esa información tiene muchos valores con missings y ensucia al resto de la base de datos. Por último, con la información que aporta no podría hacerse grafos dirigidos si se quisiera mientras que con las otras investigaciones si.
+
+Por estas razones principalmente, no se tomará en cuenta para el análisis.
+
+
+## Información de aristas y nodos
+
+Cada investigación aporta la siguiente información:
+
+- aristas (relaciones)
+
+- nodos entidades
+
+- nodos intermediarios
+
+- nodos officers
+
+- nodos address. La información que contempla este último también está presente como una variable en los otros datasets de nodos. Si bien es más fácil representarlo como nodo ya que compartir la ubicacion puede llegar a ser muy importante para este tipo de investigaciones, hacer proyecciones, etc, primero se analizará la red sin este tipo de nodos y luego se incluirá para hacer otro análisis si hay tiempo.
+
+## preguntas a responder
+
+- como se relacionan los paises para el armado de las entidades offshore ?
+
+- el rol que ocupan los nodos puede descubrirse observando las relaciones del grafo y el rol que ocupan en la red ? Se puede clasificar mirando solamente las relaciones ?
+
+
+## Universo
+
+Se levantan los datos de nodos y aristas.
+Se sacan los datos de la investigación de bahamas.
+se graban los nuevos datasets de trabajo.
+
+
+```{r}
+
+edges = read_rds(path = "./salidas_datos/originales_unidos/edges.rds")
+entities = read_rds(path = "./salidas_datos/originales_unidos/entities.rds")
+address = read_rds(path = "./salidas_datos/originales_unidos/address.rds")
+intermediary = read_rds("./salidas_datos/originales_unidos/intermediary.rds")
+officers = read_rds(path = "./salidas_datos/originales_unidos/officers.rds")
+
+
+```
+
+
+
+```{r}
+
+names(edges)
+
+names(entities)
+names(address)
+names(intermediary)
+names(officers)
+
+```
+
+## Criterio de reduccion de atributos para grafos
+
+Observando los atributos que quedan en los vertices, se observa que las entidades tienen muchos mas datos que los intermediarios, officers y direcciones.
+
+Por otro lado, para utilizar los mismos atributos en todas los tipos de nodos solamente se debería utilizar los datos de los paises (country_codes y countries)
+
+Como conclusión, a nivel de análisis de grafo, solamente se tendrá en cuenta esa característica y se evaluará como se relacionan los nodos entre sí teniendo en cuenta ese atributo.
+Sin embargo, el dataset de entidades seguirá con todos los atributos por si se quiere analizar algo mas en profundidad sobre el mismo (por ejemplo la jurisdicción)
+Esto puede lograrse agregando el atributo de jurisdiccón y su descripción en los otros atributos igual en todos los registros que sea igual como "sin_datos" y cuando se vea ese contenido se sabe que no es una entidad y que hay que ver a la persona.
+
+### Criterio de eliminación de subgrafos conexos
+
+Por último, al tener un dataset con mucha información, cuando se arme el grafo general, se analizará cada grafo conexo para ver si sus nodos integrantes tienen valores NAs en el atributos de paises y eliminar directamente ese grafo conexo.
+
+Como el objetivo del estudio es ver que tipo de relaciones hay entre paises en las conformación de estas relaciones, y viendo que el dato de paises es el único rescatable de todo el dataset, tener valores de NAs o tratar de inferirlo es imposible al no tener más datos. Una posible opción que se había manejado es que se infiera después de haber obtenido características de la topología del grafo, pero sería posterior a todo el análisis que se que se quiere hacer por lo que no habría inconveniente.
+
+### Resumiendo
+
+- los datasets de entidades, address, intermediary y officers quedan en este nivel de reducción y serán de consulta por si se quiere mas información de algúnos nodos que se quieran en la medida que avanza este trabajo.
+
+- se crea un dataset nuevo de nodos con la información reducida para armar el grafo en conjunto con el dataset de edges
+
+
+## Armado del Universo del grafo
+
+Armado de aristas y nodos
+
+```{r}
+####################
+# aristas
+#########################
+# edges. ya esta cargado
+
+###################
+# nodos
+#####################
+entities_clean = 
+  entities %>%
+  select(node_id, sourceID, country_codes, countries, jurisdiction, jurisdiction_description)
+
+# agrego columna de rol_nodo
+entities_clean$rol_nodo = "entidad"
+
+intermediary_clean =
+  intermediary %>%
+  select(node_id, sourceID, country_codes, countries)
+
+# agrego columnas
+intermediary_clean$jurisdiction = "sin_datos"
+intermediary_clean$jurisdiction_description = "sin_datos"
+intermediary_clean$rol_nodo = "intermediario"
+
+officers_clean =
+  officers %>%
+  select(node_id, sourceID, country_codes, countries)
+
+# agrego columnas
+officers_clean$jurisdiction = "sin_datos"
+officers_clean$jurisdiction_description = "sin_datos"
+officers_clean$rol_nodo = "officers"
+
+# armo el dataset de nodos
+nodos =
+  rbind(
+    entities_clean,
+    intermediary_clean,
+    officers_clean
+  )
+
+```
+
+### eliminacion de los datos de la investigación de bahamas
+
+```{r}
+nodos =
+  nodos %>%
+  mutate(
+    sourceID = if_else(stringr::str_detect(sourceID, "Paradise Papers"), "Paradise Papers", sourceID )
+  )
+
+names(nodos)
+
+
+nodos =
+  nodos %>%
+  filter(sourceID != "Bahamas Leaks")
+
+unique(nodos$sourceID)
+
+
+edges =
+  edges %>%
+  mutate(
+    sourceID = if_else(stringr::str_detect(sourceID, "Paradise Papers"), "Paradise Papers", sourceID )
+  )
+
+
+edges =
+  edges %>%
+  filter(sourceID != "Bahamas Leaks")
+
+```
+
+grabo nodos y aristas antes de continuar
+
+```{r}
+
+saveRDS(edges, file = "./salidas_datos/grafo_01/aristas.rds")
+saveRDS(nodos, file = "./salidas_datos/grafo_01/nodos.rds")
+
+```
+
+

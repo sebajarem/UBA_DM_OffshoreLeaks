@@ -1,0 +1,360 @@
+---
+title: "Análisis datos para Grafos"
+output: 
+  html_notebook:
+    toc: yes
+    number_sections: true
+    code_folding: hide
+---
+
+
+```{r setup, include=FALSE, echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+knitr::opts_knit$set(root.dir = "..")
+```
+
+```{r}
+#-----------
+# limpieza de entorno
+#-----------
+# limpia todas las variables del entorno y libera la memoria
+rm(list=ls())
+gc()
+
+```
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+# incluyo archivo con defines y funciones
+source("./R/00_Defines_VariablesGlobales_Universos.R")
+
+```
+
+
+## Abro los archivos de grafos
+
+```{r}
+
+nodos = read_rds(path = "./salidas_datos/grafo_01/nodos.rds")
+aristas = read_rds(path = "./salidas_datos/grafo_01/aristas.rds")
+
+
+```
+
+
+### analisis de NAs 
+
+se analizaran los NAs y y los datos que son NAs pero que estan cargados de otra forma.
+
+```{r}
+
+glimpse(nodos)
+glimpse(aristas)
+
+unique(aristas$sourceID)
+
+table(is.na(aristas$sourceID))
+
+```
+
+## Aristas. Estadísticas de contenidos en cada variable
+
+se hace un análisis de as aristas y las relación.
+
+A continuación se detalla una tabla con el top 10 del tipo de relación que existe en la base. Cabe destacar que se ha analizado la mayoría de los tipo de relación sin encontrar una grado significativo de NAs (solo 42 de 2543296) ni otro tipo de identificador que indique la falta de informacion como "sin datos" o "indetermindado"
+
+```{r}
+
+table(is.na(aristas$link))
+
+n_distinct(aristas$link)
+
+dlookr::diagnose_category(aristas, top = 10)
+
+
+```
+
+## Nodos. estadísticas de cada variable
+
+a continuación se muestra una tabla con las estadísticas y el top 50 de cada variable
+
+```{r}
+
+glimpse(nodos)
+
+dlookr::diagnose_category(nodos, top = 50)
+
+```
+
+como habiamos visto antes, exite una gran cantidad de paises o codigo de paises con NAs o XXX con los que no puede identificarse.
+Al no poder imputar los valores por falta de información y tampoco tener otras variables mas para poder inferirlas, se toma el criterio de la eliminación de dichos registros, pero no solamente de esos registros, sino también del subgrafo conexo al que pertenecen (si no es muy grande). 
+La base de datos es muy grande y podemos asumir que dicha decisión es correcta asumiendo que es la única variable de la que disponemos en este datset
+
+### analisis de los registros de NAs o parecidos
+
+```{r}
+
+names(nodos)
+
+nodos[is.na(nodos$country_codes),]
+
+dlookr::diagnose_category(nodos[is.na(nodos$country_codes),], top=50)
+```
+
+se puede observar que de los datos NA en country_codes, si existen valores en la ariable de jurisdicción. Asique podríamos imputarlo por el mismo valor.
+
+Solo hay 4 valores para country_codes NAs que son XX en jurisdicción
+
+
+```{r}
+
+nodos %>%
+  filter(country_codes == "XXX")
+
+dlookr::diagnose_category(nodos %>% filter(country_codes == "XXX"), top=50)
+```
+
+En este caso, podemos ver que hay 8930 casos en los que country_codes son XXX y tampoco tenemos información en jurisdicción
+
+
+### Casos para tener en la mira si salen en los subgrafos a analizar
+
+
+```{r}
+
+nodos_en_la_mira =
+  nodos %>%
+  filter(is.na(nodos$country_codes) | (country_codes == "XXX") ) %>%
+  filter((jurisdiction == "XX") | (jurisdiction == "sin_datos"))
+
+dlookr::diagnose_category(nodos_en_la_mira)
+
+saveRDS(nodos_en_la_mira, file = "./salidas_datos/grafo_01/nodos_sin_datos.rds")
+
+```
+
+se va a grabar el archivo nodos_sin_datos.rds que contiene aquellos nodos que justamente no tienene información de paises y/o jurisdicción, para cuando se encuentren los subgrafos conexos poder decidir de alguna manera cuales se estudiaran y cuales no.
+
+
+
+## Requisitos para armado de grafo inicial
+
+Despues del preprocesamiento que se estuvo haciendo, hay que asegurar que todos los ids de los nodos esten en los ids de las aristas y viceversa. De lo contrario hay que eliminar aquellos que no esten para seguir adelante en la formación del grafo
+
+```{r}
+
+n_id = as.character(nodos$node_id)
+ar_id = as.character(c(aristas$START_ID, aristas$END_ID))
+
+n_distinct(n_id)
+n_distinct(ar_id)
+
+
+
+```
+
+se puede ver que hay ids presentes en las aristas que fueron eliminados en los nodos, por tal motivo hay que eliminarlas en las aristas tambien.
+
+
+Me fijo que nodos hay que eliminar
+
+
+```{r}
+n_id = data.frame(id = n_id)
+ar_id = data.frame(id = ar_id)
+
+n_id$id = as.character(n_id$id)
+ar_id$id = as.character(ar_id$id)
+
+n_id =
+  unique(n_id)
+
+ar_id =
+  unique(ar_id)
+
+eliminar_id =
+  ar_id %>%
+  dplyr::anti_join(n_id, by = "id")
+
+
+```
+
+
+```{r}
+# acomodo las aristas con las primeras 2 variables from y to
+names(aristas)
+aristas =
+  aristas %>%
+  select(START_ID, END_ID, everything())
+  
+g00 = igraph::graph_from_data_frame(d = aristas, directed = F)
+
+# elimino nodos que no corresponden
+
+g01 = igraph::delete_vertices(g00, v = as.character(eliminar_id$id))
+
+# obtengo los nodos y aristas del grafo
+
+n = igraph::as_data_frame(g01, what = "vertices")
+ar = igraph::as_data_frame(g01, what = "edges")
+
+names(n)
+names(ar)
+
+
+```
+
+### Nodos del grafo. Agregar atributos
+
+Hasta el momento se ha hecho el grafo teniendo en cuenta solo las aristas.
+Ahora hay que agregarle los atributos de los nodos con los que se va a trabajar tambien.
+
+Para eso, hayq ue tener en cuenta que no haya filas duplicadas en el dataset de nodos y si existen, hayq ue elegir con que filas vamos a quedarnos.
+
+#### Analisis de dataset de nodos
+
+
+```{r}
+
+n_id_duplicado = nodos[duplicated(nodos$node_id),"node_id"]
+
+n_id_duplicado =
+  n_id_duplicado %>%
+  distinct()
+
+nodos_duplicados =
+  nodos %>%
+  inner_join(n_id_duplicado, by = "node_id")
+
+nodos_duplicados %>%
+  arrange(node_id)
+
+nodos_duplicados %>%
+  group_by(node_id) %>%
+  summarise(
+    n_sourceID = n_distinct(sourceID),
+    n_country_codes = n_distinct(country_codes),
+    n_countries = n_distinct(countries),
+    n_jurisdiction = n_distinct(jurisdiction),
+    n_jurisdiction_description = n_distinct(jurisdiction_description),
+    n_rol_nodo = n_distinct(rol_nodo)
+  ) %>%
+  summarise(
+    ms = max(n_sourceID),
+    mcc = max(n_country_codes),
+    mc = max(n_countries),
+    mj = max(n_jurisdiction),
+    mjd = max(n_jurisdiction_description),
+    mrn = max(n_rol_nodo)
+  )
+  
+
+
+```
+
+
+se puede ver que para un mismo nodo puede tener 2 roles
+
+### Criterio de nodos y aristas
+
+A partir de los descubierto que un mismo nodo puedo cumplir 2 roles distintos, crearemos una nueva variable que sea rol_nodo_2 que estos nodos tendran. El resto de los nodos que tienen solo un rol, se completará con "sin_datos"
+
+
+```{r}
+
+names(nodos)
+names(n_id_duplicado)
+
+# nodos con un solo rol
+nodos_1_rol =
+  nodos %>%
+  anti_join(n_id_duplicado, by = "node_id")
+
+# agrego atributo de segundo rol
+nodos_1_rol$rol_nodo_2 = "sin_datos"
+
+
+nodos_2_rol =
+  nodos %>%
+  inner_join(n_id_duplicado, by = "node_id")
+
+
+nodos_2_rol %>%
+  arrange(node_id)
+
+nodos_3_rol =
+  nodos_2_rol %>%
+  spread(key = rol_nodo,
+         value = rol_nodo,
+         fill = "sin_datos"
+         ) %>%
+  rename(
+    rol_nodo = intermediario,
+    rol_nodo_2 = officers
+  )
+
+# vuelvo a unir el dataset de nodos
+
+nodos_completo =
+  rbind(
+    nodos_1_rol,
+    nodos_3_rol
+  )
+
+
+
+```
+
+ahora que no hay duplicados en el datset de nodos, se proede a hacer el join para incorporar los atributos en el grafo
+
+
+
+
+```{r}
+
+
+glimpse(nodos_completo)
+glimpse(n)
+
+nodos_completo$node_id = as.character(nodos_completo$node_id)
+
+n1 =
+  n %>%
+  inner_join(nodos_completo, by = c("name" = "node_id"))
+
+glimpse(ar)
+glimpse(n1)
+
+# saveRDS(ar, file = "./salidas_datos/grafo_01/ar.rds")
+# saveRDS(n1, file = "./salidas_datos/grafo_01/n1.rds")
+
+# armo nuevamente el grafo para ver que no haya problemas
+g02 = igraph::graph_from_data_frame(d = ar, vertices = n1, directed = F)
+
+
+```
+
+
+verifico que si extraigo la informacion del grafo, està completa
+
+```{r}
+
+n02 = igraph::as_data_frame(x = g02, what = "vertices")
+ar02 = igraph::as_data_frame(x = g02, what = "edges")
+
+head(n02)
+head(ar02)
+
+```
+
+## Guardo los nodos y aristas
+
+```{r}
+
+saveRDS(ar02, file = "./salidas_datos/grafo_02/ar02.rds")
+saveRDS(n02, file = "./salidas_datos/grafo_02/n02.rds")
+
+
+
+```
+
+
