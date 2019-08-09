@@ -1,3 +1,7 @@
+# carpetas a ignorar por git
+datos/
+
+
 # History files
 .Rhistory
 .Rapp.history
